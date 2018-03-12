@@ -21,27 +21,84 @@ const DEFAULT_SCHEMA = "http://json-schema.org/schema#"
 var rTypeInt64, rTypeFloat64 = reflect.TypeOf(int64(0)), reflect.TypeOf(float64(0))
 
 type Document struct {
-	Schema string `json:"$schema,omitempty"`
+	Schema      string              `json:"$schema,omitempty"`
+	Definitions map[string]property `json:"definitions,omitempty"`
 	property
 }
 
-func Generate(v interface{}) string {
-	return new(Document).Read(v).String()
+type knownTypes map[reflect.Type]string
+
+func (k knownTypes) getReference(t reflect.Type) (string, bool) {
+	if k != nil {
+		if name, ok := k[t]; ok {
+			return fmt.Sprintf("#/definitions/%s", name), true
+		}
+	}
+	return "", false
 }
 
-// Reads the variable structure into the JSON-Schema Document
+type Config struct {
+	Schema      string
+	Root        interface{}
+	Definitions map[string]interface{}
+}
+
+func Generate(variable interface{}) string {
+
+	return GenerateAll(Config{
+		Root: variable,
+	})
+}
+
+func GenerateAll(config Config) string {
+
+	d := NewDocument(config)
+
+	if config.Definitions != nil {
+
+		d.knownTypes = make(map[reflect.Type]string)
+
+		for name, instance := range config.Definitions {
+			value := reflect.ValueOf(instance)
+			defType := value.Type()
+			d.knownTypes[defType] = name
+		}
+
+		for defType, name := range d.knownTypes {
+			p := property{knownTypes: d.knownTypes}
+			p.read(defType)
+			d.Definitions[name] = p
+		}
+	}
+
+	if config.Root != nil {
+		d.Read(config.Root)
+	}
+
+	return d.String()
+}
+
+func NewDocument(config Config) *Document {
+	d := &Document{
+		Definitions: make(map[string]property),
+		property:    property{},
+	}
+
+	if config.Schema == "" {
+		d.Schema = DEFAULT_SCHEMA
+	}
+
+	return d
+}
+
 func (d *Document) Read(variable interface{}) *Document {
-	d.setDefaultSchema()
+	if d.Schema == "" {
+		d.Schema = DEFAULT_SCHEMA
+	}
 
 	value := reflect.ValueOf(variable)
 	d.read(value.Type())
 	return d
-}
-
-func (d *Document) setDefaultSchema() {
-	if d.Schema == "" {
-		d.Schema = DEFAULT_SCHEMA
-	}
 }
 
 // String return the JSON encoding of the Document as a string
@@ -79,6 +136,8 @@ type property struct {
 
 	// Implemented for strings and numbers
 	Const interface{} `json:"const,omitempty"`
+
+	knownTypes knownTypes
 }
 
 func (p *property) read(t reflect.Type) {

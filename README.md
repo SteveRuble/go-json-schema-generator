@@ -1,6 +1,6 @@
 # go-json-schema-generator
-[![codecov](https://codecov.io/gh/urakozz/go-json-schema-generator/branch/master/graph/badge.svg)](https://codecov.io/gh/urakozz/go-json-schema-generator)
-[![travisci](https://travis-ci.org/urakozz/go-json-schema-generator.svg?branch=master)](https://travis-ci.org/urakozz/go-json-schema-generator)
+[![codecov](https://codecov.io/gh/SteveRuble/go-json-schema-generator/branch/master/graph/badge.svg)](https://codecov.io/gh/SteveRuble/go-json-schema-generator)
+
 
 Generate JSON Schema out of Golang schema
 
@@ -8,16 +8,16 @@ Generate JSON Schema out of Golang schema
 
 First install the package
 ```
-go get -u github.com/urakozz/go-json-schema-generator
+go get -u github.com/SteveRuble/go-json-schema-generator
 ```
 
-Then create your generator file (see [Example](https://github.com/urakozz/go-json-schema-generator/blob/master/example) folder)
+Then create your generator file (see [Example](https://github.com/SteveRuble/go-json-schema-generator/blob/master/example) folder)
 ```
 package main
 
 import (
 	"fmt"
-	"github.com/urakozz/go-json-schema-generator"
+	"github.com/SteveRuble/go-json-schema-generator"
 )
 
 type Domain struct {

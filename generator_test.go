@@ -1,10 +1,11 @@
 package generator
 
 import (
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
-	_ "github.com/tonnerre/golang-pretty"
 	. "gopkg.in/check.v1"
 )
 
@@ -178,6 +179,61 @@ func (self *propertySuite) TestLoadNested(c *C) {
 	})
 }
 
+type ExampleJSONNestedStructReferenceGrandParent struct {
+	Child ExampleJSONNestedStructReferenceParent
+}
+type ExampleJSONNestedStructReferenceParent struct {
+	Name  string
+	Child ExampleJSONNestedStructReferenceChild
+}
+type ExampleJSONNestedStructReferenceChild struct {
+	Foo string `required:"true"`
+}
+
+func (self *propertySuite) TestLoadNestedWithDefinitions(c *C) {
+
+	j := &Document{}
+	j.ReadDefinitions(map[string]interface{}{
+		"parent": ExampleJSONNestedStructReferenceParent{},
+		"child":  ExampleJSONNestedStructReferenceChild{},
+	})
+	j.Read(ExampleJSONNestedStructReferenceGrandParent{})
+
+	k := Document{
+		Schema: "http://json-schema.org/schema#",
+		Definitions: map[string]property{
+			"parent": property{
+				Type: "object",
+				Properties: map[string]*property{
+					"Name": &property{
+						Type: "string",
+					},
+					"Child": &property{
+						Ref: "#/definitions/child",
+					},
+				},
+			},
+			"child": property{
+				Type: "object",
+				Properties: map[string]*property{
+					"Foo": &property{Type: "string"},
+				},
+				Required: []string{"Foo"},
+			},
+		},
+		property: property{
+			Type: "object",
+			Properties: map[string]*property{
+				"Child": &property{
+					Ref: "#/definitions/parent",
+				},
+			},
+		},
+	}
+
+	c.Assert(findDiff(j.String(), k.String()), Equals, "")
+}
+
 type ExampleJSONBasicMaps struct {
 	Maps           map[string]string `json:",omitempty"`
 	MapOfInterface map[string]interface{}
@@ -254,6 +310,46 @@ type ItemStruct struct {
 	Foo string `required:"true"`
 }
 
+func (self *propertySuite) TestLoadNestedSliceWithDefinitions(c *C) {
+	j := &Document{}
+	j.ReadDefinitions(map[string]interface{}{
+		"parent": ExampleJSONNestedSliceStruct{},
+		"item":   &ItemStruct{},
+	})
+
+	k := Document{
+		Schema: "http://json-schema.org/schema#",
+		Definitions: map[string]property{
+			"parent": property{
+				Type: "object",
+				Properties: map[string]*property{
+					"Struct": &property{
+						Type: "array",
+						Items: &property{
+							Ref: "#/definitions/item",
+						},
+					},
+					"Struct2": &property{
+						Type: "array",
+						Items: &property{
+							Ref: "#/definitions/item",
+						},
+					},
+				},
+			},
+			"item": property{
+				Type: "object",
+				Properties: map[string]*property{
+					"Foo": &property{Type: "string"},
+				},
+				Required: []string{"Foo"},
+			},
+		},
+	}
+
+	c.Assert(findDiff(j.String(), k.String()), Equals, "")
+}
+
 func (self *propertySuite) TestLoadNestedSlice(c *C) {
 	j := &Document{}
 	j.Read(&ExampleJSONNestedSliceStruct{})
@@ -286,4 +382,31 @@ func (self *propertySuite) TestLoadNestedSlice(c *C) {
 			},
 		},
 	})
+}
+
+func findDiff(a, b string) string {
+	var index int
+	var different bool
+	for ; index < len(a) && index < len(b); index++ {
+		if a[index] != b[index] {
+			different = true
+			break
+		}
+	}
+
+	if different {
+		return fmt.Sprintf("found difference at index %d:\nactual: %q\nexpected: %q",
+			index,
+			getNearby(a, index),
+			getNearby(b, index))
+	}
+
+	return ""
+}
+
+func getNearby(a string, index int) string {
+	min := math.Max(0, float64(index)-10.0)
+	max := math.Min(float64(len(a)), float64(index)+10.0)
+
+	return a[int(min):int(max)]
 }

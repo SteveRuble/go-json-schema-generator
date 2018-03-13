@@ -13,19 +13,28 @@ type NestedItem struct {
 }
 
 type Domain struct {
-	DataOmitEmpty       string        `json:"dataOmitEmpty,omitempty"`
-	NullableData        *string       `json:"nullableData"`
-	RequiredPointerData *string       `json:"requiredPointerData" required:"true"`
-	NestedItem          NestedItem    `json:"nestedItem"`
-	NestedItemPointer   *NestedItem   `json:"nestedItemPointer"`
-	ArrayNoPointers     []NestedItem  `json:"arrayNoPointers"`
-	ArrayPointers       []*NestedItem `json:"arrayPointers"`
+	DataNoOmitEmpty     string           `json:"dataNoOmitEmpty" required:"true"`
+	DataOmitEmpty       string           `json:"dataOmitEmpty,omitempty"`
+	NullableData        *string          `json:"nullableData,omitempty"`
+	RequiredPointerData *string          `json:"requiredPointerData,omitempty" required:"true"`
+	NestedItem          NestedItem       `json:"nestedItem,omitempty"`
+	NestedItemPointer   *NestedItem      `json:"nestedItemPointer,omitempty"`
+	ArrayNoPointers     []NestedItem     `json:"arrayNoPointers,omitempty"`
+	ArrayPointers       []*NestedItem    `json:"arrayPointers,omitempty"`
+	OtherDefinedType    OtherDefinedType `json:"otherDefinedType,omitempty"`
 }
 
-type OtherRootType struct {
+type OtherDefinedType struct {
 	Data string `json:"data"`
 }
 
 func main() {
-	fmt.Println(generator.Generate(&Domain{}))
+	config := generator.Config{
+		Root: Domain{},
+		Definitions: map[string]interface{}{
+			"nestedItem": NestedItem{},
+			"other":      OtherDefinedType{},
+		},
+	}
+	fmt.Println(generator.GenerateAll(config))
 }

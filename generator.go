@@ -52,23 +52,16 @@ func Generate(variable interface{}) string {
 
 func GenerateAll(config Config) string {
 
-	d := NewDocument(config)
+	d := &Document{
+		Schema: config.Schema,
+	}
+
+	if config.Schema == "" {
+		d.Schema = DEFAULT_SCHEMA
+	}
 
 	if config.Definitions != nil {
-
-		d.knownTypes = make(map[reflect.Type]string)
-
-		for name, instance := range config.Definitions {
-			value := reflect.ValueOf(instance)
-			defType := value.Type()
-			d.knownTypes[defType] = name
-		}
-
-		for defType, name := range d.knownTypes {
-			p := property{knownTypes: d.knownTypes}
-			p.read(defType)
-			d.Definitions[name] = p
-		}
+		d.ReadDefinitions(config.Definitions)
 	}
 
 	if config.Root != nil {
@@ -84,17 +77,33 @@ func NewDocument(config Config) *Document {
 		property:    property{},
 	}
 
-	if config.Schema == "" {
-		d.Schema = DEFAULT_SCHEMA
-	}
-
 	return d
 }
 
-func (d *Document) Read(variable interface{}) *Document {
-	if d.Schema == "" {
-		d.Schema = DEFAULT_SCHEMA
+func (d *Document) ReadDefinitions(definitions map[string]interface{}) {
+	d.setDefaultSchema()
+	d.knownTypes = make(map[reflect.Type]string)
+	d.Definitions = make(map[string]property)
+
+	for name, instance := range definitions {
+		value := reflect.ValueOf(instance)
+		defType := value.Type()
+		if defType.Kind() == reflect.Ptr {
+			defType = defType.Elem()
+		}
+		d.knownTypes[defType] = name
 	}
+
+	for defType, name := range d.knownTypes {
+		p := d.child()
+		p.isDefinition = true
+		p.read(defType)
+		d.Definitions[name] = *p
+	}
+}
+
+func (d *Document) Read(variable interface{}) *Document {
+	d.setDefaultSchema()
 
 	value := reflect.ValueOf(variable)
 	d.read(value.Type())
@@ -105,6 +114,12 @@ func (d *Document) Read(variable interface{}) *Document {
 func (d *Document) String() string {
 	json, _ := json.MarshalIndent(d, "", "    ")
 	return string(json)
+}
+
+func (d *Document) setDefaultSchema() {
+	if d.Schema == "" {
+		d.Schema = DEFAULT_SCHEMA
+	}
 }
 
 type property struct {
@@ -137,7 +152,14 @@ type property struct {
 	// Implemented for strings and numbers
 	Const interface{} `json:"const,omitempty"`
 
-	knownTypes knownTypes
+	Ref string `json:"$ref,omitempty"`
+
+	knownTypes   knownTypes
+	isDefinition bool
+}
+
+func (p *property) child() *property {
+	return &property{knownTypes: p.knownTypes}
 }
 
 func (p *property) read(t reflect.Type) {
@@ -175,7 +197,7 @@ func (p *property) readFromSlice(t reflect.Type) {
 	if kind == reflect.Uint8 {
 		p.Type = "string"
 	} else if jsType != "" || kind == reflect.Ptr {
-		p.Items = &property{}
+		p.Items = p.child()
 		p.Items.read(t.Elem())
 	}
 }
@@ -192,6 +214,14 @@ func (p *property) readFromMap(t reflect.Type) {
 }
 
 func (p *property) readFromStruct(t reflect.Type) {
+	var ok bool
+	if !p.isDefinition {
+		if p.Ref, ok = p.knownTypes.getReference(t); ok {
+			p.Type = ""
+			return
+		}
+	}
+
 	p.Type = "object"
 	p.Properties = make(map[string]*property, 0)
 	p.AdditionalProperties = false
@@ -210,7 +240,7 @@ func (p *property) readFromStruct(t reflect.Type) {
 			continue
 		}
 
-		p.Properties[name] = &property{}
+		p.Properties[name] = p.child()
 		p.Properties[name].read(field.Type)
 		p.Properties[name].Description = field.Tag.Get("description")
 		p.Properties[name].addValidatorsFromTags(&field.Tag)
